@@ -1,0 +1,10 @@
+.env
+__pycache__/
+ollama/
+supabase/
+*.pyc
+*.sqlite3
+*.log
+.idea/
+.vscode/
+docker-compose.override.yml
