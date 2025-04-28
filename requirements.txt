@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+langchain
+sentence-transformers
+openai
+pydantic
+python-dotenv
+aiokafka
+supabase
+psycopg2-binary
+ollama
