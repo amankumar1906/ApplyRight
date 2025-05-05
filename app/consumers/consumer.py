@@ -5,6 +5,8 @@ from aiokafka import AIOKafkaConsumer
 from app.core.config import Config
 from app.utils.parser import parse_resume_pdf, parse_job_description
 from app.utils.jd_metadata_extraction import extract_jd_metadata_llm
+from app.utils.resume_generator import generate_tailored_resume
+from app.utils.word_file_generator import generate_word_resume
 
 # ------------------ Kafka Batch Consumer ------------------ #
 async def consume_resume_jobs():
@@ -12,7 +14,7 @@ async def consume_resume_jobs():
         Config.REDPANDA_TOPIC_NAME,
         bootstrap_servers=Config.KAFKA_BOOTSTRAP_SERVERS,
         value_deserializer=lambda m: json.loads(m.decode("utf-8")),
-        auto_offset_reset="earliest",
+        auto_offset_reset="latest",
         enable_auto_commit=True
     )
 
@@ -67,10 +69,12 @@ async def process_resume_job(task_id: str, resume_path: str, jd_path: str):
     print(f"[📑] Extracted JD Metadata for {task_id}:")
     print(jd_metadata)
 
+    tailored_resume = await generate_tailored_resume(resume_text, jd_metadata)
+    print(f"[✍️] Tailored resume for {task_id}:\n{tailored_resume}")
     # TODO:
     # 3) embed jd_metadata → store/query in vector DB
     # 4) fetch top-3 resumes → tailor final resume via LangChain agent
     # 5) save tailored resume + update status
-
-    await asyncio.sleep(1)  # placeholder
     print(f"[✅] Finished metadata extraction for Task ID: {task_id}")
+    word_path = generate_word_resume(tailored_resume, output_path=f"{task_id}_resume.docx")
+    print(f"[💾] Word file saved at: {word_path}")

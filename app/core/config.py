@@ -10,3 +10,4 @@ class Config:
     SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
     SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET")
     OLLAMA_API_BASE = os.getenv("OLLAMA_API_BASE")
+    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")

@@ -8,3 +8,4 @@ supabase/
 .idea/
 .vscode/
 docker-compose.override.yml
+uploads
