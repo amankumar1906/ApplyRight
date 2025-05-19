@@ -1,13 +1,18 @@
-import json, asyncio, textwrap, google.generativeai as genai
+import textwrap
+import asyncio
+import google.generativeai as genai
 from app.core.config import Config
 
+# Configure Gemini API
 genai.configure(api_key=Config.GOOGLE_API_KEY)
 
 # ──────────────────────────────────────────────────────────────────────────────
-def _generate_tailored_resume_sync(resume_text: str, jd_metadata: dict) -> str:
+def _generate_tailored_resume_sync(resume_text: str, jd_metadata: dict, reference_resumes: str = "") -> str:
     """
     Rewrite PROFESSIONAL EXPERIENCE + PROJECTS per weighted-skill rules.
+    Optionally uses previous reference resumes as inspiration for tone/structure.
     """
+
     # ---------- Build skill groups by weight ----------------------------------
     high   = [f'{s["skill"]} ({s["weight"]})' for s in jd_metadata["skills"] if s["weight"] > 8]
     medium = [f'{s["skill"]} ({s["weight"]})' for s in jd_metadata["skills"] if 3 <= s["weight"] <= 8]
@@ -63,20 +68,34 @@ def _generate_tailored_resume_sync(resume_text: str, jd_metadata: dict) -> str:
         Respond ONLY with the final résumé, formatted per the above structure. Do not add commentary, markdown, or extra notes.
     """)
 
-
+    # ---------- USER INPUT ----------------------------------------------------
     USER = f"""
     --- ORIGINAL CONTENT START ---
     {resume_text}
     --- ORIGINAL CONTENT END ---
     """
 
-    model   = genai.GenerativeModel("gemini-2.0-flash")
-    reply   = model.generate_content([SYSTEM, USER])
-    return reply.text 
+    if reference_resumes.strip():
+        USER += f"""
+
+--- REFERENCE RESUMES FOR TONE & STRUCTURE ---
+{reference_resumes.strip()}
+--- END REFERENCES ---
+"""
+
+    # ---------- Gemini Call ---------------------------------------------------
+    model = genai.GenerativeModel("gemini-2.0-flash")
+    reply = model.generate_content([SYSTEM, USER])
+    return reply.text
 
 # ──────────────────────────────────────────────────────────────────────────────
-async def generate_tailored_resume(resume_text: str, jd_metadata: dict) -> str:
+async def generate_tailored_resume(resume_text: str, jd_metadata: dict, reference_resumes: str = "") -> str:
     """
     Async wrapper that runs the synchronous Gemini call in a thread.
     """
-    return await asyncio.to_thread(_generate_tailored_resume_sync, resume_text, jd_metadata)
+    return await asyncio.to_thread(
+        _generate_tailored_resume_sync,
+        resume_text,
+        jd_metadata,
+        reference_resumes
+    )

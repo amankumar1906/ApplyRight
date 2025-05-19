@@ -15,10 +15,3 @@ services:
     ports:
       - "9092:9092"
       - "9644:9644"
-
-  ollama:
-    image: ollama/ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ./ollama:/root/.ollama
