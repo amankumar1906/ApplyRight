@@ -5,6 +5,9 @@ from contextlib import closing
 import google.generativeai as genai
 from app.core.config import Config
 from docx import Document
+from docx.shared import Pt, Inches
+from docx.enum.style import WD_STYLE_TYPE
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from io import BytesIO
 
 # Configure logging
@@ -64,8 +67,8 @@ def _generate_tailored_resume_sync(resume_text: str, jd_metadata: dict, referenc
 
         ── EXPERIENCE RULES ─────────
 
-        • Retain all existing bullets; rephrase for clarity/metrics while preserving meaning.
-        • If a role lacks a high/medium skill, add one new bullet (20–25 words).
+        • Retain all existing bullets but make sure they are 35-40 words; rephrase for clarity/metrics while preserving meaning.
+        • If a role lacks a high/medium skill, add one new bullet (30-35 words).
         • All bullets must be human-sounding, metric-driven, and avoid AI filler.
 
         ── PROJECT RULES ────────────
@@ -104,17 +107,123 @@ def _generate_tailored_resume_sync(resume_text: str, jd_metadata: dict, referenc
         logger.error(f"Failed to generate tailored resume: {e}")
         raise
 
-    # Create Word document
+    # Create Word document with professional styling
     buffer = BytesIO()
     try:
         doc = Document()
-        # Example: Add basic formatting (can be enhanced based on resume structure)
-        doc.add_heading("Tailored Resume", level=1)
-        for line in tailored_resume_text.strip().splitlines():
-            if line.startswith("## "):
-                doc.add_heading(line[3:], level=2)
+
+        # Set document margins to 0.5 inches
+        sections = doc.sections
+        for section in sections:
+            section.top_margin = Inches(0.5)
+            section.bottom_margin = Inches(0.5)
+            section.left_margin = Inches(0.5)
+            section.right_margin = Inches(0.5)
+
+        # Define styles
+        styles = doc.styles
+        if 'Normal' in styles:
+            normal_style = styles['Normal']
+            normal_style.font.name = 'Times New Roman'
+            normal_style.font.size = Pt(11)
+            normal_style.paragraph_format.space_after = Pt(4)
+            normal_style.paragraph_format.line_spacing = 1.0
+
+        # Define custom style for section headers
+        if 'Heading 2' not in styles:
+            styles.add_style('Heading 2', WD_STYLE_TYPE.PARAGRAPH)
+        header_style = styles['Heading 2']
+        header_style.font.name = 'Times New Roman'
+        header_style.font.size = Pt(14)
+        header_style.font.bold = True
+        header_style.paragraph_format.space_before = Pt(8)
+        header_style.paragraph_format.space_after = Pt(4)
+
+        # Define custom style for bullet points
+        bullet_style = styles.add_style('ResumeBullet', WD_STYLE_TYPE.PARAGRAPH)
+        bullet_style.font.name = 'Times New Roman'
+        bullet_style.font.size = Pt(11)
+        bullet_style.paragraph_format.left_indent = Inches(0.25)
+        bullet_style.paragraph_format.first_line_indent = Inches(-0.25)
+        bullet_style.paragraph_format.space_after = Pt(3)
+        bullet_style.paragraph_format.line_spacing = 1.0
+
+        # Process the resume text
+        lines = tailored_resume_text.strip().splitlines()
+        current_section = None
+        in_role_or_project = False
+        role_or_project_lines = []
+
+        # Add name and contact details
+        if lines:
+            name = lines[0].strip()
+            contact_lines = []
+            i = 1
+            while i < len(lines) and not any(lines[i].lower().startswith(section.lower()) for section in ["education", "skills", "professional experience", "projects"]):
+                contact_lines.append(lines[i].strip())
+                i += 1
+
+            # Add name (centered, bold, 16pt)
+            name_para = doc.add_paragraph()
+            name_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            name_run = name_para.add_run(name)
+            name_run.font.name = 'Times New Roman'
+            name_run.font.size = Pt(16)
+            name_run.bold = True
+
+            # Add contact details (centered, 10pt)
+            if contact_lines:
+                contact_para = doc.add_paragraph()
+                contact_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                contact_text = " | ".join(contact_lines)
+                contact_run = contact_para.add_run(contact_text)
+                contact_run.font.name = 'Times New Roman'
+                contact_run.font.size = Pt(10)
+                contact_para.paragraph_format.space_after = Pt(8)
+
+        # Process remaining sections
+        while i < len(lines):
+            line = lines[i].strip()
+            if not line:
+                i += 1
+                continue
+
+            # Detect section headers
+            if any(line.lower().startswith(section.lower()) for section in ["education", "skills", "professional experience", "projects"]):
+                current_section = line
+                doc.add_paragraph(current_section, style='Heading 2')
+                in_role_or_project = False
+                role_or_project_lines = []
+                i += 1
+                continue
+
+            # Handle role/project titles (e.g., "Software Engineer Intern: READY.NET, Boston, MA May - August 2023")
+            if current_section and current_section.lower() == "professional experience" or current_section.lower() == "projects":
+                if not line.startswith("- ") and not in_role_or_project:
+                    role_or_project_lines.append(line)
+                    if "May" in line or "January" in line or "June" in line:  # Assume dates indicate end of title block
+                        in_role_or_project = True
+                        title = " | ".join(role_or_project_lines)
+                        para = doc.add_paragraph(title)
+                        para.style.font.name = 'Times New Roman'
+                        para.style.font.size = Pt(11)
+                        para.paragraph_format.space_after = Pt(3)
+                        role_or_project_lines = []
+                    i += 1
+                    continue
+
+            # Handle bullets and other content
+            if line.startswith("- "):
+                para = doc.add_paragraph(line[2:], style='ResumeBullet')
             else:
-                doc.add_paragraph(line, style="ListBullet" if line.startswith("- ") else "Normal")
+                para = doc.add_paragraph(line)
+                para.style.font.name = 'Times New Roman'
+                para.style.font.size = Pt(11)
+                para.paragraph_format.space_after = Pt(4)
+                para.paragraph_format.line_spacing = 1.0
+
+            i += 1
+
         doc.save(buffer)
         buffer.seek(0)
     except Exception as e:
