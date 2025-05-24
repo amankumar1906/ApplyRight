@@ -5,6 +5,10 @@ import os
 import asyncio
 
 from app.core.kafka_producer import send_resume_job
+from app.core.config import Config
+
+supabase = Config.SUPABASE
+
 
 router = APIRouter()
 
@@ -28,6 +32,13 @@ async def submit_resume(
     with open(jd_path, "w", encoding="utf-8") as f:
         f.write(job_description_text)
 
+    # ✅ Insert initial record into Supabase
+    supabase.table("resume_jobs").insert({
+        "task_id": task_id,
+        "status": "queued"
+    }).execute()
+
+    # ✅ Send to Kafka
     job_payload = {
         "task_id": task_id,
         "resume_path": resume_path,
